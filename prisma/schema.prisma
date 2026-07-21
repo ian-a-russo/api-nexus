@@ -1,0 +1,84 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id           String   @id @default(uuid())
+  username     String   @unique
+  displayName  String
+  passwordHash String
+  avatarUrl    String?
+  createdAt    DateTime @default(now())
+
+  participants    ConversationParticipant[]
+  messages        Message[]
+  sentInvites     ConversationInvite[]      @relation("SentInvites")
+  receivedInvites ConversationInvite[]      @relation("ReceivedInvites")
+}
+
+model Conversation {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+
+  participants ConversationParticipant[]
+  messages     Message[]
+}
+
+enum InviteStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+}
+
+model ConversationInvite {
+  id          String       @id @default(uuid())
+  senderId    String
+  receiverId  String
+  status      InviteStatus @default(PENDING)
+  createdAt   DateTime     @default(now())
+  respondedAt DateTime?
+
+  sender   User @relation("SentInvites", fields: [senderId], references: [id])
+  receiver User @relation("ReceivedInvites", fields: [receiverId], references: [id])
+
+  @@unique([senderId, receiverId, status])
+}
+
+model ConversationParticipant {
+  id             String @id @default(uuid())
+  userId         String
+  conversationId String
+
+  user         User         @relation(fields: [userId], references: [id])
+  conversation Conversation @relation(fields: [conversationId], references: [id])
+
+  @@unique([userId, conversationId])
+}
+
+enum AttachmentType {
+  IMAGE
+  VIDEO
+}
+
+model Message {
+  id             String   @id @default(uuid())
+  conversationId String
+  senderId       String
+  text           String?
+  createdAt      DateTime @default(now())
+
+  attachmentUrl      String?
+  attachmentType     AttachmentType?
+  attachmentMimeType String?
+  attachmentSize     Int?
+
+  conversation Conversation @relation(fields: [conversationId], references: [id])
+  sender       User         @relation(fields: [senderId], references: [id])
+}
