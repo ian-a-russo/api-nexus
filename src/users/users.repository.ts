@@ -24,7 +24,11 @@ export class UsersRepository {
     return this.prisma.user.create({ data: input });
   }
 
-  searchByUsernamePrefix(prefix: string, excludeUserId: string, limit: number): Promise<User[]> {
+  searchByUsernamePrefix(
+    prefix: string,
+    excludeUserId: string,
+    limit: number,
+  ): Promise<User[]> {
     return this.prisma.user.findMany({
       where: {
         username: { startsWith: prefix },
@@ -36,6 +40,9 @@ export class UsersRepository {
   }
 
   updateAvatar(userId: string, avatarUrl: string): Promise<User> {
-    return this.prisma.user.update({ where: { id: userId }, data: { avatarUrl } });
+    return this.prisma.user.update({
+      where: { id: userId },
+      data: { avatarUrl },
+    });
   }
 }

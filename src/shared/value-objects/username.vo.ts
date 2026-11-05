@@ -11,7 +11,7 @@ export class Username {
     this.value = normalized;
   }
 
-  private static normalize(raw: string): string {
+  static normalize(raw: string): string {
     return raw.trim().replace(/^@/, '').toLowerCase();
   }
 

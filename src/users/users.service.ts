@@ -1,22 +1,19 @@
 import { Injectable } from '@nestjs/common';
 import { UserSummaryDto } from '../shared/dto/user-summary.dto';
+import { Username } from '../shared/value-objects/username.vo';
 import { UsersRepository } from './users.repository';
 
 const SEARCH_RESULTS_LIMIT = 10;
-
-interface UserLike {
-  id: string;
-  username: string;
-  displayName: string;
-  avatarUrl?: string | null;
-}
 
 @Injectable()
 export class UsersService {
   constructor(private readonly usersRepository: UsersRepository) {}
 
-  async search(rawQuery: string, currentUserId: string): Promise<UserSummaryDto[]> {
-    const prefix = this.normalizeSearchTerm(rawQuery);
+  async search(
+    rawQuery: string,
+    currentUserId: string,
+  ): Promise<UserSummaryDto[]> {
+    const prefix = Username.normalize(rawQuery);
     if (!prefix) {
       return [];
     }
@@ -27,14 +24,6 @@ export class UsersService {
       SEARCH_RESULTS_LIMIT,
     );
 
-    return users.map((user) => UsersService.toSummary(user));
-  }
-
-  private normalizeSearchTerm(rawQuery: string): string {
-    return rawQuery.trim().replace(/^@/, '').toLowerCase();
-  }
-
-  static toSummary(user: UserLike): UserSummaryDto {
-    return new UserSummaryDto(user.id, user.username, user.displayName, user.avatarUrl ?? null);
+    return users.map((user) => UserSummaryDto.from(user));
   }
 }

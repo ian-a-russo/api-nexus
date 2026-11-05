@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { WsException } from '@nestjs/websockets';
 import { Socket } from 'socket.io';
+import { bindUser } from '../socket-user';
 import { AuthenticatedUser } from '../types/authenticated-user';
 
 interface JwtPayload {
@@ -19,7 +20,7 @@ export class WsJwtGuard implements CanActivate {
 
   canActivate(context: ExecutionContext): boolean {
     const client = context.switchToWs().getClient<Socket>();
-    client.data.user = this.authenticate(client);
+    bindUser(client, this.authenticate(client));
     return true;
   }
 

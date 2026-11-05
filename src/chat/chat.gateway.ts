@@ -11,6 +11,7 @@ import {
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
 import { WsJwtGuard } from '../auth/guards/ws-jwt.guard';
+import { bindUser, boundUser, requireBoundUser } from '../auth/socket-user';
 import { AuthenticatedUser } from '../auth/types/authenticated-user';
 import { ConversationsService } from '../conversations/conversations.service';
 import { AttachmentInput, MessagesService } from '../messages/messages.service';
@@ -21,6 +22,7 @@ import {
   InviteRejectedEvent,
   MessageCreatedEvent,
 } from '../shared/events/domain-events';
+import { socketCorsOptions } from '../shared/config/cors';
 import { conversationRoom, userRoom } from '../shared/realtime/rooms';
 import { ConnectionRegistry } from './connection-registry';
 
@@ -34,12 +36,10 @@ interface TypingPayload {
   conversationId: string;
 }
 
-@WebSocketGateway({
-  cors: { origin: process.env.CORS_ORIGIN ?? 'http://localhost:5173', credentials: true },
-})
+@WebSocketGateway({ cors: socketCorsOptions() })
 export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @WebSocketServer()
-  private readonly server: Server;
+  private readonly server!: Server;
 
   private readonly connections = new ConnectionRegistry();
 
@@ -56,19 +56,23 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       return;
     }
 
-    client.data.user = user;
+    bindUser(client, user);
     this.connections.add(user.id, client.id);
     await client.join(userRoom(user.id));
 
     const conversations = await this.conversationsService.getForUser(user.id);
-    await Promise.all(conversations.map((conversation) => client.join(conversationRoom(conversation.id))));
+    await client.join(
+      conversations.map((conversation) => conversationRoom(conversation.id)),
+    );
     conversations.forEach((conversation) => {
-      client.to(conversationRoom(conversation.id)).emit('presence:online', { userId: user.id });
+      client
+        .to(conversationRoom(conversation.id))
+        .emit('presence:online', { userId: user.id });
     });
   }
 
   async handleDisconnect(client: Socket): Promise<void> {
-    const user = client.data.user as AuthenticatedUser | undefined;
+    const user = boundUser(client);
     if (!user) {
       return;
     }
@@ -80,7 +84,9 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
     const conversations = await this.conversationsService.getForUser(user.id);
     conversations.forEach((conversation) => {
-      this.server.to(conversationRoom(conversation.id)).emit('presence:offline', { userId: user.id });
+      this.server
+        .to(conversationRoom(conversation.id))
+        .emit('presence:offline', { userId: user.id });
     });
   }
 
@@ -90,25 +96,38 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     @ConnectedSocket() client: Socket,
     @MessageBody() payload: SendMessagePayload,
   ): Promise<void> {
-    const user = client.data.user as AuthenticatedUser;
-    await this.messagesService.send(user.id, payload.conversationId, payload.text, payload.attachment);
+    const user = requireBoundUser(client);
+    await this.messagesService.send(
+      user.id,
+      payload.conversationId,
+      payload.text,
+      payload.attachment,
+    );
   }
 
   @UseGuards(WsJwtGuard)
   @SubscribeMessage('typing:start')
-  handleTypingStart(@ConnectedSocket() client: Socket, @MessageBody() payload: TypingPayload): void {
+  handleTypingStart(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() payload: TypingPayload,
+  ): void {
     this.relayTyping(client, payload, 'typing:start');
   }
 
   @UseGuards(WsJwtGuard)
   @SubscribeMessage('typing:stop')
-  handleTypingStop(@ConnectedSocket() client: Socket, @MessageBody() payload: TypingPayload): void {
+  handleTypingStop(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() payload: TypingPayload,
+  ): void {
     this.relayTyping(client, payload, 'typing:stop');
   }
 
   @OnEvent(DomainEvent.MessageCreated)
   handleMessageCreated(event: MessageCreatedEvent): void {
-    this.server.to(conversationRoom(event.conversationId)).emit('message:new', event.message);
+    this.server
+      .to(conversationRoom(event.conversationId))
+      .emit('message:new', event.message);
   }
 
   @OnEvent(DomainEvent.InviteCreated)
@@ -123,7 +142,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @OnEvent(DomainEvent.InviteAccepted)
   async handleInviteAccepted(event: InviteAcceptedEvent): Promise<void> {
     const [userAId, userBId] = event.participantIds;
-    this.joinConversationRoom([userAId, userBId], event.conversationId);
+    await this.joinConversationRoom([userAId, userBId], event.conversationId);
 
     const [summaryForA, summaryForB] = await Promise.all([
       this.conversationsService.getSummaryFor(event.conversationId, userAId),
@@ -138,30 +157,46 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
   @OnEvent(DomainEvent.InviteRejected)
   handleInviteRejected(event: InviteRejectedEvent): void {
-    this.server.to(userRoom(event.senderId)).emit('invite:rejected', { inviteId: event.inviteId });
+    this.server
+      .to(userRoom(event.senderId))
+      .emit('invite:rejected', { inviteId: event.inviteId });
   }
 
-  private relayTyping(client: Socket, payload: TypingPayload, event: 'typing:start' | 'typing:stop'): void {
-    const user = client.data.user as AuthenticatedUser;
+  private relayTyping(
+    client: Socket,
+    payload: TypingPayload,
+    event: 'typing:start' | 'typing:stop',
+  ): void {
+    const user = requireBoundUser(client);
     client.to(conversationRoom(payload.conversationId)).emit(event, {
       conversationId: payload.conversationId,
       userId: user.id,
     });
   }
 
-  private joinConversationRoom(userIds: string[], conversationId: string): void {
-    userIds.forEach((userId) => {
-      this.connections.socketIdsFor(userId).forEach((socketId) => {
-        this.server.sockets.sockets.get(socketId)?.join(conversationRoom(conversationId));
-      });
-    });
+  private async joinConversationRoom(
+    userIds: string[],
+    conversationId: string,
+  ): Promise<void> {
+    const room = conversationRoom(conversationId);
+    const sockets = userIds
+      .flatMap((userId) => this.connections.socketIdsFor(userId))
+      .map((socketId) => this.server.sockets.sockets.get(socketId));
+    for (const socket of sockets) {
+      await socket?.join(room);
+    }
   }
 
-  private announceCurrentPresence(userIds: string[], conversationId: string): void {
+  private announceCurrentPresence(
+    userIds: string[],
+    conversationId: string,
+  ): void {
     userIds
       .filter((userId) => this.connections.isOnline(userId))
       .forEach((userId) => {
-        this.server.to(conversationRoom(conversationId)).emit('presence:online', { userId });
+        this.server
+          .to(conversationRoom(conversationId))
+          .emit('presence:online', { userId });
       });
   }
 

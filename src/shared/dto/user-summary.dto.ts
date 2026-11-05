@@ -1,13 +1,28 @@
-export class UserSummaryDto {
+export interface UserSummarySource {
   id: string;
   username: string;
   displayName: string;
-  avatarUrl: string | null;
+  avatarUrl?: string | null;
+}
 
-  constructor(id: string, username: string, displayName: string, avatarUrl: string | null = null) {
-    this.id = id;
-    this.username = username;
-    this.displayName = displayName;
-    this.avatarUrl = avatarUrl;
+export class UserSummaryDto {
+  constructor(
+    public readonly id: string,
+    public readonly username: string,
+    public readonly displayName: string,
+    public readonly avatarUrl: string | null = null,
+  ) {}
+
+  static from(user: UserSummarySource): UserSummaryDto {
+    return new UserSummaryDto(
+      user.id,
+      user.username,
+      user.displayName,
+      user.avatarUrl ?? null,
+    );
+  }
+
+  static removed(): UserSummaryDto {
+    return new UserSummaryDto('', '', 'Usuário removido');
   }
 }

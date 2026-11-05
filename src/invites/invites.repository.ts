@@ -3,7 +3,10 @@ import { ConversationInvite, InviteStatus, User } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 
 export type InviteWithSender = ConversationInvite & { sender: User };
-export type InviteWithParties = ConversationInvite & { sender: User; receiver: User };
+export type InviteWithParties = ConversationInvite & {
+  sender: User;
+  receiver: User;
+};
 
 @Injectable()
 export class InvitesRepository {
@@ -15,7 +18,10 @@ export class InvitesRepository {
     });
   }
 
-  findPendingBetween(userAId: string, userBId: string): Promise<ConversationInvite | null> {
+  findPendingBetween(
+    userAId: string,
+    userBId: string,
+  ): Promise<ConversationInvite | null> {
     return this.prisma.conversationInvite.findFirst({
       where: {
         status: InviteStatus.PENDING,

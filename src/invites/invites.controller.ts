@@ -1,4 +1,13 @@
-import { Body, Controller, Get, HttpCode, HttpStatus, Param, Post, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Param,
+  Post,
+  UseGuards,
+} from '@nestjs/common';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import type { AuthenticatedUser } from '../auth/types/authenticated-user';
@@ -13,12 +22,17 @@ export class InvitesController {
   constructor(private readonly invitesService: InvitesService) {}
 
   @Post()
-  send(@Body() dto: SendInviteDto, @CurrentUser() currentUser: AuthenticatedUser): Promise<InviteDto> {
+  send(
+    @Body() dto: SendInviteDto,
+    @CurrentUser() currentUser: AuthenticatedUser,
+  ): Promise<InviteDto> {
     return this.invitesService.send(currentUser.id, dto.username);
   }
 
   @Get()
-  listPending(@CurrentUser() currentUser: AuthenticatedUser): Promise<InviteDto[]> {
+  listPending(
+    @CurrentUser() currentUser: AuthenticatedUser,
+  ): Promise<InviteDto[]> {
     return this.invitesService.listPendingReceived(currentUser.id);
   }
 
@@ -33,7 +47,10 @@ export class InvitesController {
 
   @Post(':id/reject')
   @HttpCode(HttpStatus.OK)
-  reject(@Param('id') id: string, @CurrentUser() currentUser: AuthenticatedUser): Promise<void> {
+  reject(
+    @Param('id') id: string,
+    @CurrentUser() currentUser: AuthenticatedUser,
+  ): Promise<void> {
     return this.invitesService.reject(id, currentUser.id);
   }
 }

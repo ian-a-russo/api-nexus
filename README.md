@@ -1,98 +1,128 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# api-chat
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+[![CI](https://github.com/ian-a-russo/api-chat/actions/workflows/ci.yml/badge.svg)](https://github.com/ian-a-russo/api-chat/actions/workflows/ci.yml)
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+API de um chat em tempo real com conversas privadas por convite, presença online, indicador de "digitando" e envio de imagens e vídeos. O front-end está em [spa-chat](https://github.com/ian-a-russo/spa-chat).
 
-## Description
+## Funcionalidades
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+- Cadastro e login com JWT (senhas com bcrypt).
+- Busca de usuários por username e **convite** para iniciar uma conversa. A conversa só existe depois que o convidado aceita.
+- Mensagens em tempo real via WebSocket, com histórico paginado por cursor.
+- Presença online/offline e indicador de digitação.
+- Upload de avatar e de anexos (imagem e vídeo) para armazenamento compatível com S3.
 
-## Project setup
+## Stack
 
-```bash
-$ npm install
+| Camada         | Tecnologia                                            |
+| -------------- | ----------------------------------------------------- |
+| Framework      | NestJS 11, TypeScript em modo `strict`                |
+| Tempo real     | Socket.IO (`@nestjs/websockets`)                      |
+| Banco de dados | PostgreSQL 16 + Prisma 7                              |
+| Autenticação   | Passport JWT, bcrypt                                  |
+| Armazenamento  | Cliente MinIO (qualquer storage compatível com S3)    |
+| Qualidade      | Jest, ESLint (type-checked), Prettier, GitHub Actions |
+
+## Arquitetura
+
+Cada módulo segue as mesmas camadas, com dependências apontando para dentro:
+
+```
+Controller / Gateway  →  Service (regra de negócio)  →  Repository (Prisma)
 ```
 
-## Compile and run the project
+- **Services** concentram as regras e não conhecem HTTP nem Socket.IO. Dependem apenas de repositórios e de outros services.
+- **Repositories** são o único ponto de acesso ao Prisma, o que permite testar os services com dependências simuladas.
+- **Eventos de domínio** desacoplam a regra de negócio da entrega em tempo real. O `InvitesService` e o `MessagesService` emitem `invite.*` e `message.created` com o `EventEmitter2`, e o `ChatGateway` os traduz em eventos de WebSocket. Os services não conhecem o socket.
+- **Value objects** (`Username`, `Password`) garantem as invariantes de entrada em um lugar só.
+- **Exceções de domínio** (`shared/exceptions`) carregam o status HTTP e a mensagem, sem `if` espalhado nos controllers.
+- **DTOs imutáveis** na saída; a conversão de entidade para DTO fica em fábricas estáticas (`UserSummaryDto.from`).
 
-```bash
-# development
-$ npm run start
-
-# watch mode
-$ npm run start:dev
-
-# production mode
-$ npm run start:prod
+```
+src/
+├── auth/            JWT, guards (HTTP e WebSocket), registro e login
+├── users/           busca de usuários
+├── invites/         envio, listagem, aceite e recusa de convites
+├── conversations/   conversas e resumo para a lista lateral
+├── messages/        envio e histórico paginado
+├── chat/            gateway Socket.IO e registro de conexões (presença)
+├── uploads/         validação de arquivos e upload de avatar/mídia
+├── storage/         adaptador do storage S3
+├── prisma/          PrismaService
+└── shared/          DTOs, eventos, exceções, value objects e config de CORS
 ```
 
-## Run tests
+## Como rodar
+
+Pré-requisitos: Node 22+, Docker.
 
 ```bash
-# unit tests
-$ npm run test
-
-# e2e tests
-$ npm run test:e2e
-
-# test coverage
-$ npm run test:cov
+cp .env.example .env
+docker compose up -d
+npm install
+npx prisma migrate deploy
+npm run start:dev
 ```
 
-## Deployment
+A API sobe em `http://localhost:3000`. O Postgres expõe a porta `5433` e o storage a `9000` (console em `9001`).
 
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
+O bucket definido em `MINIO_BUCKET` precisa existir e ter leitura pública, já que `MINIO_PUBLIC_URL` é usada nas URLs devolvidas ao cliente.
 
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
+### Variáveis de ambiente
 
-```bash
-$ npm install -g @nestjs/mau
-$ mau deploy
-```
+| Variável                               | Descrição                              |
+| -------------------------------------- | -------------------------------------- |
+| `DATABASE_URL`                         | String de conexão do PostgreSQL        |
+| `JWT_SECRET`, `JWT_EXPIRES_IN`         | Segredo e validade do token            |
+| `PORT`                                 | Porta HTTP (padrão `3000`)             |
+| `CORS_ORIGIN`                          | Origem permitida para HTTP e WebSocket |
+| `MINIO_ENDPOINT`, `MINIO_PORT`         | Endereço do storage                    |
+| `MINIO_USE_SSL`                        | `true` para HTTPS                      |
+| `MINIO_ACCESS_KEY`, `MINIO_SECRET_KEY` | Credenciais do storage                 |
+| `MINIO_BUCKET`, `MINIO_PUBLIC_URL`     | Bucket e URL pública dos arquivos      |
 
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
+## Scripts
 
-## Resources
+| Comando              | O que faz                   |
+| -------------------- | --------------------------- |
+| `npm run start:dev`  | Servidor em modo watch      |
+| `npm run build`      | Compila para `dist/`        |
+| `npm run lint:check` | ESLint sem alterar arquivos |
+| `npm run typecheck`  | `tsc --noEmit`              |
+| `npm test`           | Testes unitários            |
+| `npm run test:e2e`   | Testes e2e                  |
+| `npm run test:cov`   | Cobertura                   |
 
-Check out a few resources that may come in handy when working with NestJS:
+Os testes unitários cobrem as regras de negócio (autenticação, convites, mensagens, conversas e uploads), os value objects e o registro de presença, sempre com os repositórios simulados. Não dependem de banco nem de rede.
 
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
+## Referência da API
 
-## Support
+Todas as rotas, exceto `/auth/*` e `/health`, exigem `Authorization: Bearer <token>`.
 
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
+| Método | Rota                          | Descrição                                   |
+| ------ | ----------------------------- | ------------------------------------------- |
+| GET    | `/health`                     | Verificação de saúde                        |
+| POST   | `/auth/register`              | Cria a conta e devolve o token              |
+| POST   | `/auth/login`                 | Autentica e devolve o token                 |
+| GET    | `/users/search?q=`            | Busca usuários pelo prefixo do username     |
+| POST   | `/invites`                    | Envia um convite (`{ username }`)           |
+| GET    | `/invites`                    | Lista os convites pendentes recebidos       |
+| POST   | `/invites/:id/accept`         | Aceita o convite e cria a conversa          |
+| POST   | `/invites/:id/reject`         | Recusa o convite                            |
+| GET    | `/conversations`              | Lista as conversas do usuário               |
+| GET    | `/conversations/:id/messages` | Histórico (`limit` e `before` para paginar) |
+| POST   | `/uploads/avatar`             | Envia o avatar (`multipart`, campo `file`)  |
+| POST   | `/uploads/media`              | Envia uma imagem ou vídeo para anexar       |
 
-## Stay in touch
+### Eventos WebSocket
 
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
+A conexão autentica com `auth: { token }` no handshake do Socket.IO.
 
-## License
-
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+| Direção          | Evento                                             | Payload                                  |
+| ---------------- | -------------------------------------------------- | ---------------------------------------- |
+| cliente → server | `message:send`                                     | `{ conversationId, text?, attachment? }` |
+| cliente → server | `typing:start`, `typing:stop`                      | `{ conversationId }`                     |
+| server → cliente | `message:new`                                      | mensagem criada                          |
+| server → cliente | `invite:new`, `invite:accepted`, `invite:rejected` | convite ou resumo da conversa            |
+| server → cliente | `presence:online`, `presence:offline`              | `{ userId }`                             |
+| server → cliente | `typing:start`, `typing:stop`                      | `{ conversationId, userId }`             |

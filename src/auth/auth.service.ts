@@ -3,7 +3,10 @@ import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { User } from '@prisma/client';
 import { UserSummaryDto } from '../shared/dto/user-summary.dto';
-import { InvalidCredentialsException, UsernameTakenException } from '../shared/exceptions/domain.exceptions';
+import {
+  InvalidCredentialsException,
+  UsernameTakenException,
+} from '../shared/exceptions/domain.exceptions';
 import { Password } from '../shared/value-objects/password.vo';
 import { Username } from '../shared/value-objects/username.vo';
 import { UsersRepository } from '../users/users.repository';
@@ -35,13 +38,17 @@ export class AuthService {
   }
 
   async login(dto: LoginDto): Promise<AuthResultDto> {
-    const username = this.normalizeUsername(dto.username);
-    const user = await this.usersRepository.findByUsername(username);
+    const user = await this.usersRepository.findByUsername(
+      Username.normalize(dto.username),
+    );
     if (!user) {
       throw new InvalidCredentialsException();
     }
 
-    const passwordMatches = await bcrypt.compare(dto.password, user.passwordHash);
+    const passwordMatches = await bcrypt.compare(
+      dto.password,
+      user.passwordHash,
+    );
     if (!passwordMatches) {
       throw new InvalidCredentialsException();
     }
@@ -50,14 +57,12 @@ export class AuthService {
   }
 
   private async ensureUsernameIsFree(username: Username): Promise<void> {
-    const existing = await this.usersRepository.findByUsername(username.toString());
+    const existing = await this.usersRepository.findByUsername(
+      username.toString(),
+    );
     if (existing) {
       throw new UsernameTakenException(username.toString());
     }
-  }
-
-  private normalizeUsername(rawUsername: string): string {
-    return rawUsername.trim().replace(/^@/, '').toLowerCase();
   }
 
   private hash(password: Password): Promise<string> {
@@ -65,8 +70,10 @@ export class AuthService {
   }
 
   private buildAuthResult(user: User): AuthResultDto {
-    const accessToken = this.jwtService.sign({ sub: user.id, username: user.username });
-    const summary = new UserSummaryDto(user.id, user.username, user.displayName, user.avatarUrl);
-    return new AuthResultDto(accessToken, summary);
+    const accessToken = this.jwtService.sign({
+      sub: user.id,
+      username: user.username,
+    });
+    return new AuthResultDto(accessToken, UserSummaryDto.from(user));
   }
 }

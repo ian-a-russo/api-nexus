@@ -3,7 +3,10 @@ import { EventEmitter2 } from '@nestjs/event-emitter';
 import { AttachmentType } from '@prisma/client';
 import { ConversationsService } from '../conversations/conversations.service';
 import { UserSummaryDto } from '../shared/dto/user-summary.dto';
-import { DomainEvent, MessageCreatedEvent } from '../shared/events/domain-events';
+import {
+  DomainEvent,
+  MessageCreatedEvent,
+} from '../shared/events/domain-events';
 import { EmptyMessageException } from '../shared/exceptions/domain.exceptions';
 import { MessageAttachmentDto, MessageDto } from './dto/message.dto';
 import { MessagesRepository, MessageWithSender } from './messages.repository';
@@ -43,7 +46,10 @@ export class MessagesService {
     });
     const dto = this.toDto(message);
 
-    this.eventEmitter.emit(DomainEvent.MessageCreated, new MessageCreatedEvent(conversationId, dto));
+    this.eventEmitter.emit(
+      DomainEvent.MessageCreated,
+      new MessageCreatedEvent(conversationId, dto),
+    );
 
     return dto;
   }
@@ -55,11 +61,18 @@ export class MessagesService {
     beforeMessageId?: string,
   ): Promise<MessageDto[]> {
     await this.conversationsService.ensureParticipant(conversationId, userId);
-    const messages = await this.messagesRepository.findByConversation(conversationId, limit, beforeMessageId);
+    const messages = await this.messagesRepository.findByConversation(
+      conversationId,
+      limit,
+      beforeMessageId,
+    );
     return messages.map((message) => this.toDto(message));
   }
 
-  private sanitize(rawText: string | undefined, attachment: AttachmentInput | undefined): string | null {
+  private sanitize(
+    rawText: string | undefined,
+    attachment: AttachmentInput | undefined,
+  ): string | null {
     const text = (rawText ?? '').trim();
     if (!text && !attachment) {
       throw new EmptyMessageException();
@@ -68,20 +81,27 @@ export class MessagesService {
   }
 
   private toDto(message: MessageWithSender): MessageDto {
-    const sender = new UserSummaryDto(
-      message.sender.id,
-      message.sender.username,
-      message.sender.displayName,
-      message.sender.avatarUrl,
+    return new MessageDto(
+      message.id,
+      message.conversationId,
+      message.text,
+      message.createdAt,
+      UserSummaryDto.from(message.sender),
+      this.toAttachmentDto(message),
     );
-    const attachment = message.attachmentUrl
-      ? new MessageAttachmentDto(
-          message.attachmentUrl,
-          message.attachmentType as AttachmentType,
-          message.attachmentMimeType ?? '',
-          message.attachmentSize ?? 0,
-        )
-      : null;
-    return new MessageDto(message.id, message.conversationId, message.text, message.createdAt, sender, attachment);
+  }
+
+  private toAttachmentDto(
+    message: MessageWithSender,
+  ): MessageAttachmentDto | null {
+    if (!message.attachmentUrl) {
+      return null;
+    }
+    return new MessageAttachmentDto(
+      message.attachmentUrl,
+      message.attachmentType as AttachmentType,
+      message.attachmentMimeType ?? '',
+      message.attachmentSize ?? 0,
+    );
   }
 }

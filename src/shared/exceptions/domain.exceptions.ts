@@ -8,7 +8,9 @@ import {
 
 export class InvalidUsernameException extends BadRequestException {
   constructor() {
-    super('Username deve ter 3-20 caracteres: letras minúsculas, números e "_".');
+    super(
+      'Username deve ter 3-20 caracteres: letras minúsculas, números e "_".',
+    );
   }
 }
 

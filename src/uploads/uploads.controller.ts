@@ -1,4 +1,11 @@
-import { BadRequestException, Controller, Post, UploadedFile, UseGuards, UseInterceptors } from '@nestjs/common';
+import {
+  BadRequestException,
+  Controller,
+  Post,
+  UploadedFile,
+  UseGuards,
+  UseInterceptors,
+} from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
@@ -16,7 +23,12 @@ export class UploadsController {
   constructor(private readonly uploadsService: UploadsService) {}
 
   @Post('avatar')
-  @UseInterceptors(FileInterceptor('file', { storage: memoryStorage(), limits: { fileSize: AVATAR_MAX_BYTES } }))
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: memoryStorage(),
+      limits: { fileSize: AVATAR_MAX_BYTES },
+    }),
+  )
   uploadAvatar(
     @UploadedFile() file: Express.Multer.File,
     @CurrentUser() currentUser: AuthenticatedUser,
@@ -26,7 +38,12 @@ export class UploadsController {
   }
 
   @Post('media')
-  @UseInterceptors(FileInterceptor('file', { storage: memoryStorage(), limits: { fileSize: MEDIA_MAX_BYTES } }))
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: memoryStorage(),
+      limits: { fileSize: MEDIA_MAX_BYTES },
+    }),
+  )
   uploadMedia(
     @UploadedFile() file: Express.Multer.File,
     @CurrentUser() currentUser: AuthenticatedUser,

@@ -11,7 +11,9 @@ export class ConversationsController {
   constructor(private readonly conversationsService: ConversationsService) {}
 
   @Get()
-  list(@CurrentUser() currentUser: AuthenticatedUser): Promise<ConversationSummaryDto[]> {
+  list(
+    @CurrentUser() currentUser: AuthenticatedUser,
+  ): Promise<ConversationSummaryDto[]> {
     return this.conversationsService.getForUser(currentUser.id);
   }
 }

@@ -1,3 +1,4 @@
+
 services:
   postgres:
     image: postgres:16-alpine
@@ -17,35 +18,26 @@ services:
       retries: 5
 
   minio:
-    image: minio/minio:latest
+    image: rustfs/rustfs:latest
     container_name: chat-minio
-    command: server /data --console-address ":9001"
+    command: /data
     environment:
-      MINIO_ROOT_USER: chatminio
-      MINIO_ROOT_PASSWORD: chatminio123
+      RUSTFS_ACCESS_KEY: chatminio
+      RUSTFS_SECRET_KEY: chatminio123
+      RUSTFS_ADDRESS: ":9000"
+      RUSTFS_CONSOLE_ADDRESS: ":9001"
+      RUSTFS_CONSOLE_ENABLE: "true"
     ports:
       - "9000:9000"
       - "9001:9001"
     volumes:
       - minio-data:/data
     healthcheck:
-      test: ["CMD", "mc", "ready", "local"]
+      test: ["CMD", "curl", "-f", "http://localhost:9000/health"]
       interval: 5s
       timeout: 5s
-      retries: 5
-
-  minio-init:
-    image: minio/mc:latest
-    container_name: chat-minio-init
-    depends_on:
-      minio:
-        condition: service_healthy
-    entrypoint: >
-      /bin/sh -c "
-      mc alias set local http://minio:9000 chatminio chatminio123 &&
-      mc mb --ignore-existing local/chat-media &&
-      mc anonymous set download local/chat-media
-      "
+      retries: 10
+      start_period: 20s
 
 volumes:
   pgdata:

@@ -4,10 +4,19 @@ import { UserSummaryDto } from '../shared/dto/user-summary.dto';
 import { InvalidFileTypeException } from '../shared/exceptions/domain.exceptions';
 import { StorageService } from '../storage/storage.service';
 import { UsersRepository } from '../users/users.repository';
-import { UsersService } from '../users/users.service';
 
-const AVATAR_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
-const MEDIA_MIME_TYPES = [...AVATAR_MIME_TYPES, 'video/mp4', 'video/webm', 'video/quicktime'];
+const AVATAR_MIME_TYPES = [
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'image/gif',
+];
+const MEDIA_MIME_TYPES = [
+  ...AVATAR_MIME_TYPES,
+  'video/mp4',
+  'video/webm',
+  'video/quicktime',
+];
 
 export interface UploadedFile {
   buffer: Buffer;
@@ -30,7 +39,10 @@ export class UploadsService {
     private readonly usersRepository: UsersRepository,
   ) {}
 
-  async uploadAvatar(userId: string, file: UploadedFile): Promise<UserSummaryDto> {
+  async uploadAvatar(
+    userId: string,
+    file: UploadedFile,
+  ): Promise<UserSummaryDto> {
     this.ensureAllowed(file.mimetype, AVATAR_MIME_TYPES);
     const { url } = await this.storageService.upload(
       `avatars/${userId}`,
@@ -39,10 +51,13 @@ export class UploadsService {
       this.extensionFor(file),
     );
     const user = await this.usersRepository.updateAvatar(userId, url);
-    return UsersService.toSummary(user);
+    return UserSummaryDto.from(user);
   }
 
-  async uploadMedia(userId: string, file: UploadedFile): Promise<MediaUploadResult> {
+  async uploadMedia(
+    userId: string,
+    file: UploadedFile,
+  ): Promise<MediaUploadResult> {
     this.ensureAllowed(file.mimetype, MEDIA_MIME_TYPES);
     const { url } = await this.storageService.upload(
       `media/${userId}`,
@@ -52,7 +67,9 @@ export class UploadsService {
     );
     return {
       url,
-      type: file.mimetype.startsWith('video/') ? AttachmentType.VIDEO : AttachmentType.IMAGE,
+      type: file.mimetype.startsWith('video/')
+        ? AttachmentType.VIDEO
+        : AttachmentType.IMAGE,
       mimeType: file.mimetype,
       size: file.size,
     };
@@ -65,7 +82,9 @@ export class UploadsService {
   }
 
   private extensionFor(file: UploadedFile): string {
-    const fromName = file.originalname.includes('.') ? `.${file.originalname.split('.').pop()}` : '';
+    const fromName = file.originalname.includes('.')
+      ? `.${file.originalname.split('.').pop()}`
+      : '';
     return fromName || `.${file.mimetype.split('/').pop()}`;
   }
 }
